@@ -1,0 +1,371 @@
+diff --git a/FourQ_64bit_and_portable/FourQ.h b/FourQ_64bit_and_portable/FourQ.h
+index f3a453a..8131e76 100644
+--- a/FourQ_64bit_and_portable/FourQ.h
++++ b/FourQ_64bit_and_portable/FourQ.h
+@@ -149,7 +149,8 @@ extern "C" {
+ // Definition of complementary cryptographic functions
+ 
+ #define RandomBytesFunction     random_bytes    
+-#define CryptoHashFunction      crypto_sha512        // Use SHA-512 by default
++#define CryptoHashFunction(in, inlen, out, outlen)\
++    KangarooTwelve(in, inlen, out, outlen, 0, 0)
+ 
+ 
+ // Basic parameters for variable-base scalar multiplication (without using endomorphisms)
+diff --git a/FourQ_64bit_and_portable/eccp2_core.c b/FourQ_64bit_and_portable/eccp2_core.c
+index 0275eb4..1086548 100644
+--- a/FourQ_64bit_and_portable/eccp2_core.c
++++ b/FourQ_64bit_and_portable/eccp2_core.c
+@@ -144,7 +144,7 @@ void clear_words(void* mem, unsigned int nwords)
+   // It has been tested with MSVS 2013 and GNU GCC 4.6.3, 4.7.3, 4.8.2 and 4.8.4. Users are responsible for verifying correctness with different compilers.  
+   // See "Compliant Solution (C99)" at https://www.securecoding.cert.org/confluence/display/c/MSC06-C.+Beware+of+compiler+optimizations 
+     unsigned int i;
+-    volatile unsigned int *v = mem; 
++    volatile unsigned int *v = (unsigned int *)mem; 
+ 
+     for (i = 0; i < nwords; i++)
+         v[i] = 0;
+diff --git a/FourQ_64bit_and_portable/kex.c b/FourQ_64bit_and_portable/kex.c
+index e4a03cf..27c5190 100644
+--- a/FourQ_64bit_and_portable/kex.c
++++ b/FourQ_64bit_and_portable/kex.c
+@@ -48,7 +48,7 @@ ECCRYPTO_STATUS CompressedKeyGeneration(unsigned char* SecretKey, unsigned char*
+   // Outputs: 32-byte SecretKey and 32-byte PublicKey 
+     ECCRYPTO_STATUS Status = ECCRYPTO_ERROR_UNKNOWN;
+ 
+-	Status = RandomBytesFunction(SecretKey, 32);
++	Status = (ECCRYPTO_STATUS)RandomBytesFunction(SecretKey, 32);
+ 	if (Status != ECCRYPTO_SUCCESS) {
+ 		goto cleanup;
+ 	}
+@@ -86,7 +86,7 @@ ECCRYPTO_STATUS CompressedSecretAgreement(const unsigned char* SecretKey, const
+ 		goto cleanup;
+ 	}
+          
+-    Status = ecc_mul(A, (digit_t*)SecretKey, A, true);
++    Status = (ECCRYPTO_STATUS)ecc_mul(A, (digit_t*)SecretKey, A, true);
+ 	if (Status != ECCRYPTO_SUCCESS) {
+ 		goto cleanup;
+ 	}
+@@ -127,7 +127,7 @@ ECCRYPTO_STATUS KeyGeneration(unsigned char* SecretKey, unsigned char* PublicKey
+   // Outputs: 32-byte SecretKey and 64-byte PublicKey 
+ 	ECCRYPTO_STATUS Status = ECCRYPTO_ERROR_UNKNOWN;
+ 
+-	Status = RandomBytesFunction(SecretKey, 32);
++	Status = (ECCRYPTO_STATUS)RandomBytesFunction(SecretKey, 32);
+ 	if (Status != ECCRYPTO_SUCCESS) {
+ 		goto cleanup;
+ 	}
+@@ -160,7 +160,7 @@ ECCRYPTO_STATUS SecretAgreement(const unsigned char* SecretKey, const unsigned c
+ 		goto cleanup;
+     }
+ 
+-	Status = ecc_mul((point_affine*)PublicKey, (digit_t*)SecretKey, A, true);  // Also verifies that PublicKey is a point on the curve. If it is not, it fails
++	Status = (ECCRYPTO_STATUS)ecc_mul((point_affine*)PublicKey, (digit_t*)SecretKey, A, true);  // Also verifies that PublicKey is a point on the curve. If it is not, it fails
+ 	if (Status != ECCRYPTO_SUCCESS) {
+ 		goto cleanup;
+ 	}
+diff --git a/FourQ_64bit_and_portable/makefile b/FourQ_64bit_and_portable/makefile
+index 7b6fd07..91c3ab6 100644
+--- a/FourQ_64bit_and_portable/makefile
++++ b/FourQ_64bit_and_portable/makefile
+@@ -2,11 +2,14 @@
+ 
+ OPT=-O3     # Optimization option by default
+ 
+-CC=gcc
++EMCC=emcc
++CC ?=gcc
+ ifeq "$(CC)" "gcc"
+     COMPILER=gcc
+ else ifeq "$(CC)" "clang"
+     COMPILER=clang
++else ifeq "$(CC)" "emcc"
++    COMPILER=emcc
+ endif
+ 
+ ifeq "$(ARCH)" "x64"
+@@ -94,11 +97,31 @@ endif
+ SHARED_LIB_TARGET=libFourQ.so
+ ifeq "$(SHARED_LIB)" "TRUE"
+     DO_MAKE_SHARED_LIB=-fPIC
+-	SHARED_LIB_O=$(SHARED_LIB_TARGET)
++		SHARED_LIB_O=$(SHARED_LIB_TARGET)
+ endif
+ 
++K12_LIB_TARGET=libk12.a
++libk12 = ../../K12
++ifeq "$(PLAINK12)" "TRUE"
++    ifeq "$(ARCH)" "x86"
++        libk12.t = plain32/$(K12_LIB_TARGET)
++    else
++        libk12.t = plain64/$(K12_LIB_TARGET)
++    endif
++else
++    ifeq "$(ARCH)" "x86"
++        libk12.t = generic32/$(K12_LIB_TARGET)
++    else
++        libk12.t = generic64/$(K12_LIB_TARGET)
++    endif
++endif
++libk12.a = $(libk12)/bin/$(libk12.t)
++libk12.headers = $(libk12.a).headers
++
+ cc=$(COMPILER)
+-CFLAGS=-c $(OPT) $(ADDITIONAL_SETTINGS) $(SIMD) -D $(ARCHITECTURE) -D __LINUX__ $(USE_AVX) $(USE_AVX2) $(USE_ASM) $(USE_GENERIC) $(USE_ENDOMORPHISMS) $(USE_SERIAL_PUSH) $(DO_MAKE_SHARED_LIB)
++# CFLAGS=-c $(OPT) $(ADDITIONAL_SETTINGS) $(SIMD) -D $(ARCHITECTURE) -D __LINUX__ $(USE_AVX) $(USE_AVX2) $(USE_ASM) $(USE_GENERIC) $(USE_ENDOMORPHISMS) $(USE_SERIAL_PUSH) $(DO_MAKE_SHARED_LIB)
++CCFLAGS=$(OPT) $(ADDITIONAL_SETTINGS) -I$(libk12.headers) -I$(libk12)/lib $(SIMD) -D $(ARCHITECTURE) -D __LINUX__ $(USE_AVX) $(USE_AVX2) $(USE_ASM) $(USE_GENERIC) $(USE_ENDOMORPHISMS) $(USE_SERIAL_PUSH) $(DO_MAKE_SHARED_LIB)
++CFLAGS=-c $(CCFLAGS)
+ LDFLAGS=
+ ifdef ASM_var
+ ifdef AVX2_var
+@@ -107,18 +130,21 @@ else
+     ASM_OBJECTS=fp2_1271.o
+ endif 
+ endif
+-OBJECTS=eccp2.o eccp2_no_endo.o eccp2_core.o $(ASM_OBJECTS) crypto_util.o schnorrq.o hash_to_curve.o kex.o sha512.o random.o 
++# OBJECTS=eccp2.o eccp2_no_endo.o eccp2_core.o $(ASM_OBJECTS) crypto_util.o schnorrq.o hash_to_curve.o kex.o sha512.o random.o
++OBJECTS=eccp2.o eccp2_no_endo.o eccp2_core.o $(ASM_OBJECTS) crypto_util.o schnorrq.o hash_to_curve.o kex.o $(libk12.a) random.o
+ OBJECTS_FP_TEST=fp_tests.o $(OBJECTS) test_extras.o 
+ OBJECTS_ECC_TEST=ecc_tests.o $(OBJECTS) test_extras.o 
+ OBJECTS_CRYPTO_TEST=crypto_tests.o $(OBJECTS) test_extras.o 
+ OBJECTS_ALL=$(OBJECTS) $(OBJECTS_FP_TEST) $(OBJECTS_ECC_TEST) $(OBJECTS_CRYPTO_TEST)
+ 
++# all: crypto_test ecc_test fp_test $(SHARED_LIB_O)
+ all: crypto_test ecc_test fp_test $(SHARED_LIB_O)
+ 
+-ifeq "$(SHARED_LIB)" "TRUE"
+-    $(SHARED_LIB_O): $(OBJECTS)
+-	    $(CC) -shared -o $(SHARED_LIB_O) $(OBJECTS)
+-endif
++
++$(SHARED_LIB_O): $(OBJECTS)
++	#$(CC) -fPIC -O3 -s SIDE_MODULE=1 -o $(SHARED_LIB_O) $(OBJECTS)
++	#$(CC) -o $@ --no-entry -fPIC -O3 $(OBJECTS)
++	$(CC) -fPIC -O3 $(OBJECTS) -sMODULARIZE -s EXPORTED_FUNCTIONS='["_generatePublicKey", "_sign", "_verify", "_generateCompressedPublicKey", "_compressedSecretAgreement", "_K12", "_malloc", "_free"]' -o ./crypto.cjs
+ 
+ crypto_test: $(OBJECTS_CRYPTO_TEST)
+ 	$(CC) -o crypto_test $(OBJECTS_CRYPTO_TEST) $(ARM_SETTING)
+@@ -151,7 +177,7 @@ else
+ endif
+ endif
+ 
+-schnorrq.o: schnorrq.c
++schnorrq.o: schnorrq.c $(libk12.a)
+ 	$(CC) $(CFLAGS) schnorrq.c
+ 
+ hash_to_curve.o: hash_to_curve.c
+@@ -163,8 +189,12 @@ kex.o: kex.c
+ crypto_util.o: crypto_util.c
+ 	$(CC) $(CFLAGS) crypto_util.c
+ 
+-sha512.o: ../sha512/sha512.c
+-	$(CC) $(CFLAGS) ../sha512/sha512.c
++$(libk12.a): $(libk12)
++	@$(MAKE) -C $^
++	@$(MAKE) -C $^ $(libk12.t)
++
++# sha512.o: ../sha512/sha512.c
++# 	$(CC) $(CFLAGS) ../sha512/sha512.c
+ 
+ random.o: ../random/random.c
+ 	$(CC) $(CFLAGS) ../random/random.c
+@@ -172,7 +202,7 @@ random.o: ../random/random.c
+ test_extras.o: tests/test_extras.c
+ 	$(CC) $(CFLAGS) tests/test_extras.c
+ 
+-crypto_tests.o: tests/crypto_tests.c
++crypto_tests.o: tests/crypto_tests.c $(libk12.a)
+ 	$(CC) $(CFLAGS) tests/crypto_tests.c
+ 
+ ecc_tests.o: tests/ecc_tests.c
+@@ -184,5 +214,6 @@ fp_tests.o: tests/fp_tests.c
+ .PHONY: clean
+ 
+ clean:
+-	rm -rf $(SHARED_LIB_TARGET) crypto_test ecc_test fp_test *.o AMD64/consts.s
++	@$(MAKE) -C $(libk12) clean
++	@rm -rf $(SHARED_LIB_TARGET) crypto_test ecc_test fp_test *.o AMD64/consts.s
+ 
+diff --git a/FourQ_64bit_and_portable/schnorrq.c b/FourQ_64bit_and_portable/schnorrq.c
+index da89f86..c620f4a 100644
+--- a/FourQ_64bit_and_portable/schnorrq.c
++++ b/FourQ_64bit_and_portable/schnorrq.c
+@@ -13,10 +13,10 @@
+ #include "FourQ_internal.h"
+ #include "FourQ_params.h"
+ #include "../random/random.h"
+-#include "../sha512/sha512.h"
++#include "../../K12/lib/KangarooTwelve.h"
+ #include <malloc.h>
+ #include <string.h>
+-
++#include <emscripten.h>
+ 
+ ECCRYPTO_STATUS SchnorrQ_KeyGeneration(const unsigned char* SecretKey, unsigned char* PublicKey)
+ { // SchnorrQ public key generation
+@@ -28,7 +28,7 @@ ECCRYPTO_STATUS SchnorrQ_KeyGeneration(const unsigned char* SecretKey, unsigned
+     unsigned char k[64];
+     ECCRYPTO_STATUS Status = ECCRYPTO_ERROR_UNKNOWN;
+   
+-    if (CryptoHashFunction(SecretKey, 32, k) != 0) {   
++    if (CryptoHashFunction(SecretKey, 32, k, 64) != 0) {   
+         Status = ECCRYPTO_ERROR;
+         goto cleanup;
+     }
+@@ -53,7 +53,7 @@ ECCRYPTO_STATUS SchnorrQ_FullKeyGeneration(unsigned char* SecretKey, unsigned ch
+   // Outputs: 32-byte SecretKey and 32-byte PublicKey
+     ECCRYPTO_STATUS Status = ECCRYPTO_ERROR_UNKNOWN;
+ 
+-	Status = RandomBytesFunction(SecretKey, 32);
++	Status = (ECCRYPTO_STATUS)RandomBytesFunction(SecretKey, 32);
+     if (Status != ECCRYPTO_SUCCESS) {
+         goto cleanup;
+     }
+@@ -84,7 +84,7 @@ ECCRYPTO_STATUS SchnorrQ_Sign(const unsigned char* SecretKey, const unsigned cha
+     digit_t* S = (digit_t*)(Signature+32);
+     ECCRYPTO_STATUS Status = ECCRYPTO_ERROR_UNKNOWN;
+       
+-    if (CryptoHashFunction(SecretKey, 32, k) != 0) {   
++    if (CryptoHashFunction(SecretKey, 32, k, 64) != 0) {
+         Status = ECCRYPTO_ERROR;
+         goto cleanup;
+     }
+@@ -98,7 +98,7 @@ ECCRYPTO_STATUS SchnorrQ_Sign(const unsigned char* SecretKey, const unsigned cha
+     memmove(temp+32, k+32, 32);
+     memmove(temp+64, Message, SizeMessage);
+   
+-    if (CryptoHashFunction(temp+32, SizeMessage+32, r) != 0) {   
++    if (CryptoHashFunction(temp+32, SizeMessage+32, r, 64) != 0) {
+         Status = ECCRYPTO_ERROR;
+         goto cleanup;
+     }
+@@ -108,7 +108,7 @@ ECCRYPTO_STATUS SchnorrQ_Sign(const unsigned char* SecretKey, const unsigned cha
+     memmove(temp, Signature, 32);
+     memmove(temp+32, PublicKey, 32);
+   
+-    if (CryptoHashFunction(temp, SizeMessage+64, h) != 0) {   
++    if (CryptoHashFunction(temp, SizeMessage+64, h, 64) != 0) {
+         Status = ECCRYPTO_ERROR;
+         goto cleanup;
+     }	
+@@ -163,12 +163,12 @@ ECCRYPTO_STATUS SchnorrQ_Verify(const unsigned char* PublicKey, const unsigned c
+     memmove(temp+32, PublicKey, 32);
+     memmove(temp+64, Message, SizeMessage);
+   
+-    if (CryptoHashFunction(temp, SizeMessage+64, h) != 0) {   
++    if (CryptoHashFunction(temp, SizeMessage+64, h, 64) != 0) {
+         Status = ECCRYPTO_ERROR;
+         goto cleanup;
+     }
+ 
+-    Status = ecc_mul_double((digit_t*)(Signature+32), A, (digit_t*)h, A);      
++    Status = (ECCRYPTO_STATUS)ecc_mul_double((digit_t*)(Signature+32), A, (digit_t*)h, A);
+     if (Status != ECCRYPTO_SUCCESS) {                                                
+         goto cleanup;
+     }
+@@ -187,4 +187,58 @@ cleanup:
+ 		free(temp);
+     
+     return Status;
+-}
+\ No newline at end of file
++}
++
++EMSCRIPTEN_KEEPALIVE
++bool generatePublicKey(const unsigned char* SecretKey, unsigned char* PublicKey) {
++    if (SchnorrQ_KeyGeneration(SecretKey, PublicKey) == 1) {
++        return true;
++    } else {
++        return false;
++    }
++}
++
++EMSCRIPTEN_KEEPALIVE
++bool sign(const unsigned char* SecretKey, const unsigned char* PublicKey, const unsigned char* Message, const unsigned int SizeMessage, unsigned char* Signature) {
++    if(SchnorrQ_Sign(SecretKey, PublicKey, Message, SizeMessage, Signature) == 1) {
++        return true;
++    } else {
++        return false;
++    }
++}
++
++EMSCRIPTEN_KEEPALIVE
++bool verify(const unsigned char* PublicKey, const unsigned char* Message, const unsigned int SizeMessage, const unsigned char* Signature) {
++    unsigned int valid = 0;
++
++    if (SchnorrQ_Verify(PublicKey, Message, SizeMessage, Signature, &valid) == 1) {
++        if (valid) {
++            return true;
++        }
++    }
++    return false;
++}
++
++EMSCRIPTEN_KEEPALIVE
++bool generateCompressedPublicKey(const unsigned char* SecretKey, unsigned char* PublicKey) {
++    if (CompressedPublicKeyGeneration(SecretKey, PublicKey) == 1) {
++        return true;
++    }
++    return false;
++}
++
++EMSCRIPTEN_KEEPALIVE
++bool compressedSecretAgreement(const unsigned char* SecretKey, const unsigned char* PublicKey, unsigned char* SharedSecret) {
++    if (CompressedSecretAgreement(SecretKey, PublicKey, SharedSecret) == 1) {
++        return true;
++    }
++    return false;
++}
++
++EMSCRIPTEN_KEEPALIVE
++bool K12(const unsigned char *in, const unsigned int inlen, unsigned char *out, const unsigned int outlen) {
++    if (CryptoHashFunction(in, inlen, out, outlen) == 0) {
++        return true;
++    }
++    return false;
++}
+diff --git a/FourQ_64bit_and_portable/tests/crypto_tests.c b/FourQ_64bit_and_portable/tests/crypto_tests.c
+index 44f9952..eeeaa2f 100644
+--- a/FourQ_64bit_and_portable/tests/crypto_tests.c
++++ b/FourQ_64bit_and_portable/tests/crypto_tests.c
+@@ -9,7 +9,7 @@
+ #include "../FourQ_api.h"
+ #include "../FourQ_params.h"
+ #include "../../random/random.h"
+-#include "../../sha512/sha512.h"
++#include "../../K12/lib/KangarooTwelve.h"
+ #include "test_extras.h"
+ #include <stdio.h>
+ 
+@@ -345,7 +345,7 @@ ECCRYPTO_STATUS hash2curve_test()
+     for (n = 0; n < TEST_LOOPS; n++)
+     {
+         RandomBytesFunction(Value, 32);
+-        CryptoHashFunction(Value, 32, HashedValue);
++        CryptoHashFunction(Value, 32, HashedValue, 64);
+         mod1271(((felm_t*)f2elmt)[0]);
+         mod1271(((felm_t*)f2elmt)[1]);
+ 
+@@ -385,7 +385,7 @@ ECCRYPTO_STATUS hash2curve_run()
+     for (n = 0; n < BENCH_LOOPS; n++)
+     {
+         RandomBytesFunction(Value, 32);
+-        CryptoHashFunction(Value, 32, HashedValue);
++        CryptoHashFunction(Value, 32, HashedValue, 64);
+         mod1271(((felm_t*)f2elmt)[0]);
+         mod1271(((felm_t*)f2elmt)[1]);
+ 
+diff --git a/FourQ_64bit_and_portable/tests/test_extras.c b/FourQ_64bit_and_portable/tests/test_extras.c
+index f93a355..ee9b328 100644
+--- a/FourQ_64bit_and_portable/tests/test_extras.c
++++ b/FourQ_64bit_and_portable/tests/test_extras.c
+@@ -29,7 +29,7 @@ int64_t cpucycles(void)
+ #elif (OS_TARGET == OS_LINUX) && (TARGET == TARGET_AMD64 || TARGET == TARGET_x86)
+     unsigned int hi, lo;
+ 
+-    asm volatile ("rdtsc\n\t" : "=a" (lo), "=d"(hi));
++    //asm volatile ("rdtsc\n\t" : "=a" (lo), "=d"(hi));
+     return ((int64_t)lo) | (((int64_t)hi) << 32);
+ #elif (OS_TARGET == OS_LINUX) && (TARGET == TARGET_ARM || TARGET == TARGET_ARM64)
+     struct timespec time;

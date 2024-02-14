@@ -1,0 +1,6 @@
+[submodule "FourQlib"]
+	path = FourQlib
+	url = https://github.com/microsoft/FourQlib
+[submodule "K12"]
+	path = K12
+	url = https://github.com/XKCP/K12
