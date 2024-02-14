@@ -19,3 +19,4 @@ jobs:
       - run: sudo apt-get install -y xsltproc
       - run: bun install
       - run: bun run build
+      - run: bun run test
