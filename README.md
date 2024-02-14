@@ -1,4 +1,6 @@
 # qubic-crypto
+[![build](https://github.com/computor-tools/qubic-crypto/actions/workflows/build.yml/badge.svg)](https://github.com/computor-tools/qubic-crypto/actions/workflows/build.yml)
+
 Cryptographic functions used by Qubic protocol in WASM.
 
 > [!CAUTION]
@@ -7,7 +9,7 @@ Cryptographic functions used by Qubic protocol in WASM.
 ### To install dependencies and build:
 This should pull and run emsdk from https://github.com/emscripten-core/emsdk
 
-Tested on arch linux only. You'll need GNU Make.
+Tested on arch linux and ubuntu only, [check CI](https://github.com/computor-tools/qubic-crypto/actions). You'll need GNU Make.
 ```bash
 bun run build
 ```
