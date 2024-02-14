@@ -7,7 +7,7 @@ Cryptographic functions used by Qubic protocol in WASM.
 ### To install dependencies and build:
 This should pull and run emsdk from https://github.com/emscripten-core/emsdk
 
-Tested on arch linux only.
+Tested on arch linux only. You'll need GNU Make.
 ```bash
 bun run build
 ```
