@@ -50,6 +50,20 @@ const test = async function () {
     const d = new Uint8Array(crypto.DIGEST_LENGTH).fill(0);
     await crypto.K12(m, d, crypto.DIGEST_LENGTH);
     console.log('K12:', equal(d, exp.d) ? 'OK' : 'NOT OK');
+
+    const t0 = performance.now();
+    for (let i = 0; i < 451 * 10; i++) {
+        const sk = new Uint8Array(crypto.PRIVATE_KEY_LENGTH).fill(1);
+        const skv = new DataView(sk.buffer, sk.byteOffset);
+        skv.setUint32(0, i, true);
+        const pk = await crypto.generatePublicKey(sk);
+        const m = new Uint8Array(8 + 8 + 16 + 6 * crypto.DIGEST_LENGTH + 2 * crypto.DIGEST_LENGTH).fill(2);
+        const d = new Uint8Array(crypto.DIGEST_LENGTH);
+        await crypto.K12(m, d, crypto.DIGEST_LENGTH);
+        const s = await crypto.sign(sk, pk, d);
+        await crypto.verify(pk, d, s);
+    }
+    console.log(`bench (10*451 sign/verify): ${(performance.now() - t0).toFixed(0)}ms`);
 };
 
 test();
