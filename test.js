@@ -38,18 +38,27 @@ const test = async function () {
 
     const sk = new Uint8Array(crypto.PRIVATE_KEY_LENGTH).fill(1);
     const pk = await crypto.generatePublicKey(sk);
-    console.log('Public key:', equal(pk, exp.pk) && pk.byteLength === crypto.PUBLIC_KEY_LENGTH ? 'OK' : 'NOT OK');
+    const testPk = equal(pk, exp.pk) && pk.byteLength === crypto.PUBLIC_KEY_LENGTH
+    console.log('Public key:', testPk ? 'OK' : 'NOT OK');
 
     const m = new Uint8Array(138).fill(2);
     const s = await crypto.sign(sk, pk, m);
-    console.log('Signature:', equal(s, exp.s) && s.byteLength === crypto.SIGNATURE_LENGTH ? 'OK' : 'NOT OK');
+    const testSig = equal(s, exp.s) && s.byteLength === crypto.SIGNATURE_LENGTH;
+    console.log('Signature:', testSig ? 'OK' : 'NOT OK');
     const s2 = s.slice();
     s2[10]++;
-    console.log('Verification:', (await crypto.verify(pk, m, s) && !(await crypto.verify(pk, m, s2))) ? 'OK' : 'NOT_OK');
+    const testVer = (await crypto.verify(pk, m, s) && !(await crypto.verify(pk, m, s2)));
+    console.log('Verification:', testVer ? 'OK' : 'NOT_OK');
 
     const d = new Uint8Array(crypto.DIGEST_LENGTH).fill(0);
     await crypto.K12(m, d, crypto.DIGEST_LENGTH);
-    console.log('K12:', equal(d, exp.d) ? 'OK' : 'NOT OK');
+    const testK12 = equal(d, exp.d) && d.byteLength === crypto.DIGEST_LENGTH;
+    console.log('K12:', testK12 ? 'OK' : 'NOT OK');
+
+    if (!(testPk && testSig && testVer && testK12)) {
+        console.log('Test failed!');
+        process.exit(1);
+    }
 
     const t0 = performance.now();
     for (let i = 0; i < 451 * 10; i++) {
@@ -64,6 +73,8 @@ const test = async function () {
         await crypto.verify(pk, d, s);
     }
     console.log(`bench (10*451 sign/verify): ${(performance.now() - t0).toFixed(0)}ms`);
+
+    process.exit(0);
 };
 
 test();
