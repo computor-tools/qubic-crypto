@@ -50,12 +50,25 @@ const test = async function () {
     const testVer = (await crypto.verify(pk, m, s) && !(await crypto.verify(pk, m, s2)));
     console.log('Verification:', testVer ? 'OK' : 'NOT_OK');
 
+    const sk1 = new Uint8Array(crypto.PRIVATE_KEY_LENGTH).fill(2);
+    const sk2 = new Uint8Array(crypto.PRIVATE_KEY_LENGTH).fill(3);
+    const sk1h = new Uint8Array(crypto.SHARED_SECRET_LENGTH);
+    await crypto.K12(sk1, sk1h, crypto.PUBLIC_KEY_LENGTH);
+    const sk2h = new Uint8Array(crypto.SHARED_SECRET_LENGTH);
+    await crypto.K12(sk2, sk2h, crypto.PUBLIC_KEY_LENGTH);
+    const cpk1 = await crypto.generateCompressedPublicKey(sk1h);
+    const cpk2 = await crypto.generateCompressedPublicKey(sk2h);
+    const ssk1 = await crypto.compressedSecretAgreement(sk1h, cpk2);
+    const ssk2 = await crypto.compressedSecretAgreement(sk2h, cpk1);
+    const testKex = equal(ssk1, ssk2) && ssk1.byteLength === crypto.SHARED_SECRET_LENGTH;
+    console.log('Kex:', testKex ? 'OK' : 'NOT OK');
+
     const d = new Uint8Array(crypto.DIGEST_LENGTH).fill(0);
     await crypto.K12(m, d, crypto.DIGEST_LENGTH);
     const testK12 = equal(d, exp.d) && d.byteLength === crypto.DIGEST_LENGTH;
     console.log('K12:', testK12 ? 'OK' : 'NOT OK');
 
-    if (!(testPk && testSig && testVer && testK12)) {
+    if (!(testPk && testSig && testVer && testKex && testK12)) {
         console.log('Test failed!');
         process.exit(1);
     }

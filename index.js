@@ -59,6 +59,7 @@ import factory from './crypto.cjs';
 const PRIVATE_KEY_LENGTH = 32;
 const PUBLIC_KEY_LENGTH = 32;
 const SIGNATURE_LENGTH = 64;
+const SHARED_SECRET_LENGTH = 32;
 
 const methods = factory().then((instance) => ({
     generatePublicKey: (sk, pk) => instance._generatePublicKey(sk.byteOffset, pk.byteOffset),
@@ -80,6 +81,7 @@ const crypto = {
     PRIVATE_KEY_LENGTH,
     PUBLIC_KEY_LENGTH,
     SIGNATURE_LENGTH,
+    SHARED_SECRET_LENGTH,
     DIGEST_LENGTH: 32,
     NONCE_LENGTH: 32,
     async generatePublicKey(secretKey) {
@@ -137,7 +139,7 @@ const crypto = {
         free(pk);
         free(m);
         free(s);
-        return valid;
+        return valid === 0 ? false : true;
     },
 
     async generateCompressedPublicKey(secretKey) {
@@ -146,7 +148,7 @@ const crypto = {
         }
         const { generateCompressedPublicKey, allocU8, free } = await methods;
         const sk = allocU8(PRIVATE_KEY_LENGTH, secretKey);
-        const pk = allocU8(PRIVATE_KEY_LENGTH);
+        const pk = allocU8(PUBLIC_KEY_LENGTH);
         if (generateCompressedPublicKey(sk, pk)) {
             const out = pk.slice();
             free(sk);
@@ -166,8 +168,8 @@ const crypto = {
         }
         const { compressedSecretAgreement, allocU8, free } = await methods;
         const sk = allocU8(PRIVATE_KEY_LENGTH, secretKey);
-        const pk = allocU8(PRIVATE_KEY_LENGTH);
-        const ssk = allocU8(SHARED_SECRET_KENTH);
+        const pk = allocU8(PUBLIC_KEY_LENGTH, publicKey);
+        const ssk = allocU8(SHARED_SECRET_LENGTH);
         if (compressedSecretAgreement(sk, pk, ssk)) {
             const out = ssk.slice();
             free(sk);
