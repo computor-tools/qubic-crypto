@@ -142,7 +142,7 @@ index 7b6fd07..91c3ab6 100644
 +$(SHARED_LIB_O): $(OBJECTS)
 +	#$(CC) -fPIC -O3 -s SIDE_MODULE=1 -o $(SHARED_LIB_O) $(OBJECTS)
 +	#$(CC) -o $@ --no-entry -fPIC -O3 $(OBJECTS)
-+	$(CC) -fPIC -O3 $(OBJECTS) -sMODULARIZE -s EXPORTED_FUNCTIONS='["_generatePublicKey", "_sign", "_verify", "_generateCompressedPublicKey", "_compressedSecretAgreement", "_K12", "_malloc", "_free"]' -o ./crypto.cjs
++	$(CC) -fPIC -O3 $(OBJECTS) -sMODULARIZE -s EXPORTED_FUNCTIONS='["_generatePublicKey", "_sign", "_verify", "_generateCompressedPublicKey", "_compressedSecretAgreement", "_K12", "_merkleRoot", "_malloc", "_free"]' -o ./crypto.cjs
  
  crypto_test: $(OBJECTS_CRYPTO_TEST)
  	$(CC) -o crypto_test $(OBJECTS_CRYPTO_TEST) $(ARM_SETTING)
@@ -264,7 +264,7 @@ index da89f86..c620f4a 100644
      if (Status != ECCRYPTO_SUCCESS) {                                                
          goto cleanup;
      }
-@@ -187,4 +187,58 @@ cleanup:
+@@ -187,4 +187,92 @@ cleanup:
  		free(temp);
      
      return Status;
@@ -325,6 +325,41 @@ index da89f86..c620f4a 100644
 +    }
 +    return false;
 +}
++
++EMSCRIPTEN_KEEPALIVE
++bool merkleRoot(const unsigned char depth, int index, unsigned char *data, const unsigned int datalen, unsigned char *siblings, unsigned char *root) {
++    if (index < 0) {
++        return false;
++    }
++
++    if (CryptoHashFunction(data, datalen, root, 32) != 0) {
++        return false;
++    }
++
++    unsigned char *pair;
++    pair = (unsigned char*)calloc(1, 64);
++
++    for (unsigned char i = 0; i < depth; i++) {
++        if ((index & 1) == 0) {
++            memmove(pair, root, 32);
++            memmove(pair+32, siblings + i * 32, 32);
++        } else {
++            memmove(pair, siblings + i * 32, 32);
++            memmove(pair+32, root, 32);
++        }
++        if (CryptoHashFunction(pair, 64, root, 32) != 0) {
++            free(pair);
++            return false;
++        }
++
++        index >>= 1;
++    }
++
++    free(pair);
++
++    return true;
++}
+
 diff --git a/FourQ_64bit_and_portable/tests/crypto_tests.c b/FourQ_64bit_and_portable/tests/crypto_tests.c
 index 44f9952..eeeaa2f 100644
 --- a/FourQ_64bit_and_portable/tests/crypto_tests.c

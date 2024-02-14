@@ -60,6 +60,7 @@ const PRIVATE_KEY_LENGTH = 32;
 const PUBLIC_KEY_LENGTH = 32;
 const SIGNATURE_LENGTH = 64;
 const SHARED_SECRET_LENGTH = 32;
+const DIGEST_LENGTH = 32;
 
 const methods = factory().then((instance) => ({
     generatePublicKey: (sk, pk) => instance._generatePublicKey(sk.byteOffset, pk.byteOffset),
@@ -68,6 +69,7 @@ const methods = factory().then((instance) => ({
     generateCompressedPublicKey: (sk, pk) => instance._generateCompressedPublicKey(sk.byteOffset,  pk.byteOffset),
     compressedSecretAgreement: (sk, pk, ssk) => instance._compressedSecretAgreement(sk.byteOffset, pk.byteOffset, ssk.byteOffset),
     K12: (inp, inpsize, out, outsize) => instance._K12(inp.byteOffset, inpsize, out.byteOffset, outsize),
+    merkleRoot: (depth, index, data, datalen, siblings, root) => instance._merkleRoot(depth, index, data.byteOffset, datalen, siblings.byteOffset, root.byteOffset),
     free: (chunk) => instance._free(chunk.byteOffset),
     allocU8(size, value = new Uint8Array(size).fill(0)) {
         const ptr = instance._malloc(size);
@@ -82,11 +84,12 @@ const crypto = {
     PUBLIC_KEY_LENGTH,
     SIGNATURE_LENGTH,
     SHARED_SECRET_LENGTH,
-    DIGEST_LENGTH: 32,
+    DIGEST_LENGTH,
     NONCE_LENGTH: 32,
+
     async generatePublicKey(secretKey) {
         if (secretKey.byteLength !== PRIVATE_KEY_LENGTH) {
-            throw new RangeError('Invalid private key length.');
+            throw new RangeError('Invalid private key length!');
         }
         const { generatePublicKey, allocU8, free } = await methods;
         const sk = allocU8(PRIVATE_KEY_LENGTH, secretKey);
@@ -97,15 +100,18 @@ const crypto = {
             free(pk);
             return out;
         } else {
+            free(sk);
+            free(pk);
             throw new Error('Public key generation failed!');
         }
     },
+
     async sign(secretKey, publicKey, message) {
         if (secretKey.byteLength !== PRIVATE_KEY_LENGTH) {
-            throw new RangeError('Invalid private key length.');
+            throw new RangeError('Invalid private key length!');
         }
         if (publicKey.byteLength !== PUBLIC_KEY_LENGTH) {
-            throw new RangeError('Invalid public key length.');
+            throw new RangeError('Invalid public key length!');
         }
         const { sign, allocU8, free } = await methods;
         const sk = allocU8(PRIVATE_KEY_LENGTH, secretKey);
@@ -120,16 +126,20 @@ const crypto = {
             free(s);
             return out;
         } else {
+            free(sk);
+            free(pk);
+            free(m);
+            free(s);
             throw new Error('Signature generation failed!');
         }
     },
 
     async verify(publicKey, message, signature) {
         if (publicKey.byteLength !== PUBLIC_KEY_LENGTH) {
-            throw new RangeError('Invalid public key length.');
+            throw new RangeError('Invalid public key length!');
         }
         if (signature.byteLength !== SIGNATURE_LENGTH) {
-            throw new RangeError('Invalid signature length.');
+            throw new RangeError('Invalid signature length!');
         }
         const { verify, allocU8, free } = await methods;
         const pk = allocU8(PRIVATE_KEY_LENGTH, publicKey);
@@ -144,7 +154,7 @@ const crypto = {
 
     async generateCompressedPublicKey(secretKey) {
         if (secretKey.byteLength !== PRIVATE_KEY_LENGTH) {
-            throw new RangeError('Invalid private key length.');
+            throw new RangeError('Invalid private key length!');
         }
         const { generateCompressedPublicKey, allocU8, free } = await methods;
         const sk = allocU8(PRIVATE_KEY_LENGTH, secretKey);
@@ -155,16 +165,18 @@ const crypto = {
             free(pk);
             return out;
         } else {
+            free(sk);
+            free(pk);
             throw new Error('Compressed public key generation failed!');
         }
     },
 
     async compressedSecretAgreement(secretKey, publicKey) {
         if (secretKey.byteLength !== PRIVATE_KEY_LENGTH) {
-            throw new RangeError('Invalid private key length.');
+            throw new RangeError('Invalid private key length!');
         }
         if (publicKey.byteLength !== PUBLIC_KEY_LENGTH) {
-            throw new RangeError('Invalid public key length.');
+            throw new RangeError('Invalid public key length!');
         }
         const { compressedSecretAgreement, allocU8, free } = await methods;
         const sk = allocU8(PRIVATE_KEY_LENGTH, secretKey);
@@ -177,13 +189,16 @@ const crypto = {
             free(ssk);
             return out;
         } else {
+            free(sk);
+            free(pk);
+            free(ssk);
             throw new Error('Compressed secret agreement failed!');
         }
     },
 
     async K12(input, output, outputSize, outputOffset = 0) {
         if (output.byteLength < outputSize) {
-            throw new RangeError('Invalid output size.');
+            throw new RangeError('Invalid output size!');
         }
         const { K12, allocU8, free } = await methods;
         const inp = allocU8(input.byteLength, input);
@@ -193,7 +208,33 @@ const crypto = {
             free(inp);
             free(out);
         } else {
+            free(inp);
+            free(out);
             throw new Error('K12 failed!');
+        }
+    },
+
+    async merkleRoot(depth, index, data, siblings, root) {
+        if (root.byteLength !== DIGEST_LENGTH) {
+            throw new Error('Invalid root size!');
+        }
+        if ((siblings.byteLength / depth) !== DIGEST_LENGTH) {
+            throw new Error('Invalid siblings size!');
+        }
+        const { merkleRoot, allocU8, free } = await methods;
+        const d = allocU8(data.byteLength, data);
+        const s = allocU8(siblings.byteLength, siblings);
+        const r = allocU8(DIGEST_LENGTH);
+        if (merkleRoot(depth, index, d, data.byteLength, s, r)) {
+            root.set(r.slice());
+            free(d);
+            free(s);
+            free(r);
+        } else {
+            free(d);
+            free(s);
+            free(r);
+            throw new Error('Merkle root: K12 failed!');
         }
     },
 };

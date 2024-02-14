@@ -1,41 +1,47 @@
 import crypto from './index.js';
 
-const test = async function () {
-    const equal = function (a, b) {
-        if (a.byteLength  !== b.byteLength) {
+const equal = function (a, b) {
+    if (a.byteLength  !== b.byteLength) {
+        return false;
+    }
+    for (let i = 0; i < a.byteLength; i++) {
+        if (a[i] !== b[i]) {
             return false;
         }
-        for (let i = 0; i < a.byteLength; i++) {
-            if (a[i] !== b[i]) {
-                return false;
-            }
-        }
-        return true;
     }
+    return true;
+}
 
-    const exp = {
-        pk: Uint8Array.from([
-            250,  81,  48,  79, 222,  52,  19, 148,
-             73,   89, 140, 90,   7, 247, 102,   1,
-            179, 163, 214, 186, 194,  32, 108, 252,
-            229,   8, 185,  34,   1,  10, 197, 162
-        ]),
-        s:  Uint8Array.from([
-            172, 189, 236, 216,  25, 163, 118,  27,  70,  58, 247,
-             65, 184, 149, 166,  71,  81,  28, 153, 175, 177,  71,
-            181, 166,   8, 228,   6,  18, 246,  83,   8,  86, 160,
-            149,  69,  25,  82,  75, 192,  29,  95, 166, 179,   8,
-            220,  40,  77, 130, 109, 144,  64, 124, 151, 181,  41,
-            232, 119,  97,  67, 132, 114,   7,   3,   0
-        ]),
-        d: Uint8Array.from([
-             92, 200, 181,  38, 183, 148, 163, 142,
-            176, 162, 175, 236, 212, 167, 178, 149,
-            197, 142,  53, 161, 223,  42, 243,   3,
-             80,  93, 134, 113,  69,  74, 200, 239
-        ]),
-    };
+const exp = {
+    pk: Uint8Array.from([
+        250,  81,  48,  79, 222,  52,  19, 148,
+         73,   89, 140, 90,   7, 247, 102,   1,
+        179, 163, 214, 186, 194,  32, 108, 252,
+        229,   8, 185,  34,   1,  10, 197, 162
+    ]),
+    s:  Uint8Array.from([
+        172, 189, 236, 216,  25, 163, 118,  27,  70,  58, 247,
+         65, 184, 149, 166,  71,  81,  28, 153, 175, 177,  71,
+        181, 166,   8, 228,   6,  18, 246,  83,   8,  86, 160,
+        149,  69,  25,  82,  75, 192,  29,  95, 166, 179,   8,
+        220,  40,  77, 130, 109, 144,  64, 124, 151, 181,  41,
+        232, 119,  97,  67, 132, 114,   7,   3,   0
+    ]),
+    d: Uint8Array.from([
+         92, 200, 181,  38, 183, 148, 163, 142,
+        176, 162, 175, 236, 212, 167, 178, 149,
+        197, 142,  53, 161, 223,  42, 243,   3,
+         80,  93, 134, 113,  69,  74, 200, 239
+    ]),
+    r: Uint8Array.from([
+        183, 160, 215,  40, 163, 149, 205, 134,
+        120, 168,  26, 226,  31, 207,  74,  53,
+        229, 158, 180, 203, 241, 220, 191,  12,
+          5, 145, 115, 119,  45, 156, 245, 234
+    ]),
+};
 
+const test = async function () {
     const sk = new Uint8Array(crypto.PRIVATE_KEY_LENGTH).fill(1);
     const pk = await crypto.generatePublicKey(sk);
     const testPk = equal(pk, exp.pk) && pk.byteLength === crypto.PUBLIC_KEY_LENGTH
@@ -68,7 +74,16 @@ const test = async function () {
     const testK12 = equal(d, exp.d) && d.byteLength === crypto.DIGEST_LENGTH;
     console.log('K12:', testK12 ? 'OK' : 'NOT OK');
 
-    if (!(testPk && testSig && testVer && testKex && testK12)) {
+    const depth = 24;
+    const index = 12321;
+    const data = new Uint8Array(2 + 2 * 8 + 2 * 4 + 2 * 4).fill(1);
+    const siblings = new Uint8Array(depth * crypto.DIGEST_LENGTH);
+    const root = new Uint8Array(crypto.DIGEST_LENGTH);
+    await crypto.merkleRoot(depth, index, data, siblings, root);
+    const testRoot = equal(root, exp.r) && root.byteLength === crypto.DIGEST_LENGTH;
+    console.log('Merkle root', testRoot ? 'OK' : 'NOT OK');
+
+    if (!(testPk && testSig && testVer && testKex && testK12 && testRoot)) {
         console.log('Test failed!');
         process.exit(1);
     }
@@ -86,6 +101,17 @@ const test = async function () {
         await crypto.verify(pk, d, s);
     }
     console.log(`bench (10*451 sign/verify): ${(performance.now() - t0).toFixed(0)}ms`);
+
+    const t1 = performance.now();
+    for (let i = 0; i < 100000; i++) {
+        const depth = 24;
+        const index = 10;
+        const data = new Uint8Array(2 + 2 * 8 + 2 * 4 + 2 * 4);
+        const siblings = new Uint8Array(depth * crypto.DIGEST_LENGTH);
+        const root = new Uint8Array(crypto.DIGEST_LENGTH);
+        await crypto.merkleRoot(depth, index, data, siblings, root);
+    }
+    console.log(`bench (100'000 entities, depth 24): ${(performance.now() - t1).toFixed(0)}ms`);
 
     process.exit(0);
 };
