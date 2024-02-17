@@ -264,7 +264,7 @@ index da89f86..c620f4a 100644
      if (Status != ECCRYPTO_SUCCESS) {                                                
          goto cleanup;
      }
-@@ -187,4 +187,92 @@ cleanup:
+@@ -187,4 +187,255 @@ cleanup:
  		free(temp);
      
      return Status;
@@ -358,6 +358,169 @@ index da89f86..c620f4a 100644
 +    free(pair);
 +
 +    return true;
++}
++
++void randomValues(unsigned char* computorPublicKey[32], unsigned char* nonce[32], unsigned char* output, unsigned int outputSize) {
++    unsigned char state[200];
++    memmove(state, computorPublicKey, 32);
++    memmove(state+32, nonce, 32);
++    memset(&state[64], 0, sizeof(state) - 64);
++
++    for (unsigned int i = 0; i < outputSize / sizeof(state); i++) {
++        KeccakP1600_Permute_12rounds(state);
++        memcpy(output, state, sizeof(state));
++        output += sizeof(state);
++    }
++    if (outputSize % sizeof(state)) {
++        KeccakP1600_Permute_12rounds(state);
++        memcpy(output, state, outputSize % sizeof(state));
++    }
++}
++
++EMSCRIPTEN_KEEPALIVE
++bool verifySolution(
++    const unsigned int dataLength,
++    const unsigned int infoLength,
++    const unsigned int numberOfInputNeurons,
++    const unsigned int numberOfOutputNeurons,
++    const int maxInputDuration,
++    const int maxOutputDuration,
++    const unsigned char* neuronValueLimit[8],
++    unsigned char* randomSeed[32],
++    const unsigned int solutionThreshold,
++    unsigned char* computorPublicKey[32],
++    unsigned char* nonce[32]
++) {
++    long long data[dataLength];
++
++    memset(randomSeed, 0, 32);
++    randomValues(randomSeed, randomSeed, (unsigned char*)data, sizeof(data));
++    for (unsigned int i = 0; i < dataLength; i++)
++    {
++        data[i] = (data[i] >= 0 ? 1 : -1);
++    }
++
++    memset(computorPublicKey, 0, sizeof(&computorPublicKey));
++
++    long long inputNeurons[dataLength + numberOfInputNeurons + infoLength];
++    long long outputNeurons[infoLength + numberOfOutputNeurons + dataLength];
++    char synapses[(numberOfInputNeurons + infoLength) * (dataLength + numberOfInputNeurons + infoLength) + (numberOfOutputNeurons + dataLength) * (infoLength + numberOfOutputNeurons + dataLength)];
++
++    randomValues(computorPublicKey, nonce, (unsigned char*)synapses, sizeof(&synapses));
++
++    for (unsigned int inputNeuronIndex = 0; inputNeuronIndex < numberOfInputNeurons + infoLength; inputNeuronIndex++)
++    {
++        for (unsigned int anotherInputNeuronIndex = 0; anotherInputNeuronIndex < dataLength + numberOfInputNeurons + infoLength; anotherInputNeuronIndex++)
++        {
++            const unsigned int offset = inputNeuronIndex * (dataLength + numberOfInputNeurons + infoLength) + anotherInputNeuronIndex;
++            if (synapses[offset] == -128)
++            {
++                synapses[offset] = 0;
++            }
++        }
++    }
++    for (unsigned int outputNeuronIndex = 0; outputNeuronIndex < numberOfOutputNeurons + dataLength; outputNeuronIndex++)
++    {
++        for (unsigned int anotherOutputNeuronIndex = 0; anotherOutputNeuronIndex < infoLength + numberOfOutputNeurons + dataLength; anotherOutputNeuronIndex++)
++        {
++            const unsigned int offset = (numberOfInputNeurons + infoLength) * (dataLength + numberOfInputNeurons + infoLength) + outputNeuronIndex * (infoLength + numberOfOutputNeurons + dataLength) + anotherOutputNeuronIndex;
++            if (synapses[offset] == -128)
++            {
++                synapses[offset] = 0;
++            }
++        }
++    }
++    for (unsigned int inputNeuronIndex = 0; inputNeuronIndex < numberOfInputNeurons + infoLength; inputNeuronIndex++)
++    {
++        synapses[inputNeuronIndex * (dataLength + numberOfInputNeurons + infoLength) + (dataLength + inputNeuronIndex)] = 0;
++    }
++    for (unsigned int outputNeuronIndex = 0; outputNeuronIndex < numberOfOutputNeurons + dataLength; outputNeuronIndex++)
++    {
++        synapses[(numberOfInputNeurons + infoLength) * (dataLength + numberOfInputNeurons + infoLength) + outputNeuronIndex * (infoLength + numberOfOutputNeurons + dataLength) + (infoLength + outputNeuronIndex)] = 0;
++    }
++
++    memcpy(&inputNeurons[0], &data, sizeof(data));
++
++    for (int tick = 1; tick <= maxInputDuration; tick++)
++    {
++        for (unsigned int inputNeuronIndex = 0; inputNeuronIndex < numberOfInputNeurons + infoLength; inputNeuronIndex++)
++        {
++            for (unsigned int anotherInputNeuronIndex = 0; anotherInputNeuronIndex < dataLength + numberOfInputNeurons + infoLength; anotherInputNeuronIndex++)
++            {
++                const unsigned int offset = inputNeuronIndex * (dataLength + numberOfInputNeurons + infoLength) + anotherInputNeuronIndex;
++                if (synapses[offset] != 0
++                    && tick % synapses[offset] == 0)
++                {
++                    if (synapses[offset] > 0)
++                    {
++                        inputNeurons[dataLength + inputNeuronIndex] += inputNeurons[anotherInputNeuronIndex];
++                    }
++                    else
++                    {
++                        inputNeurons[dataLength + inputNeuronIndex] -= inputNeurons[anotherInputNeuronIndex];
++                    }
++
++                    if (inputNeurons[dataLength + inputNeuronIndex] > (long long)(neuronValueLimit))
++                    {
++                        inputNeurons[dataLength + inputNeuronIndex] = (long long)(neuronValueLimit);
++                    }
++                    if (inputNeurons[dataLength + inputNeuronIndex] <= -((long long)(neuronValueLimit)))
++                    {
++                        inputNeurons[dataLength + inputNeuronIndex] = -((long long)(neuronValueLimit)) + 1;
++                    }
++                }
++            }
++        }
++    }
++
++    for (unsigned int i = 0; i < infoLength; i++)
++    {
++        outputNeurons[i] = (inputNeurons[dataLength + numberOfInputNeurons + i] >= 0 ? 1 : -1);
++    }
++
++    for (int tick = 1; tick <= maxOutputDuration; tick++)
++    {
++        for (unsigned int outputNeuronIndex = 0; outputNeuronIndex < outputNeuronIndex + dataLength; outputNeuronIndex++)
++        {
++            for (unsigned int anotherOutputNeuronIndex = 0; anotherOutputNeuronIndex < infoLength + outputNeuronIndex + dataLength; anotherOutputNeuronIndex++)
++            {
++                const unsigned int offset = (numberOfInputNeurons + infoLength) * (dataLength + numberOfInputNeurons + infoLength) + outputNeuronIndex * (infoLength + outputNeuronIndex + dataLength) + anotherOutputNeuronIndex;
++                if (synapses[offset] != 0
++                    && tick % synapses[offset] == 0)
++                {
++                    if (synapses[offset] > 0)
++                    {
++                        outputNeurons[infoLength + outputNeuronIndex] += outputNeurons[anotherOutputNeuronIndex];
++                    }
++                    else
++                    {
++                        outputNeurons[infoLength + outputNeuronIndex] -= outputNeurons[anotherOutputNeuronIndex];
++                    }
++
++                    if (outputNeurons[infoLength + outputNeuronIndex] > (long long)(neuronValueLimit))
++                    {
++                        outputNeurons[infoLength + outputNeuronIndex] = (long long)(neuronValueLimit);
++                    }
++                    if (outputNeurons[infoLength + outputNeuronIndex] <= -((long long)(neuronValueLimit)))
++                    {
++                        outputNeurons[infoLength + outputNeuronIndex] = -((long long)(neuronValueLimit)) + 1;
++                    }
++                }
++            }
++        }
++    }
++
++    unsigned int score = 0;
++
++    for (unsigned int i = 0; i < dataLength; i++)
++    {
++        if ((data[i] >= 0) == (outputNeurons[infoLength + numberOfOutputNeurons + i] >= 0))
++        {
++            score++;
++        }
++    }
++
++    return (score >= (dataLength / 2) + solutionThreshold) || (score <= (dataLength / 2) - solutionThreshold);
 +}
 
 diff --git a/FourQ_64bit_and_portable/tests/crypto_tests.c b/FourQ_64bit_and_portable/tests/crypto_tests.c
