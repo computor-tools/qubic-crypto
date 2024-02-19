@@ -142,7 +142,7 @@ index 7b6fd07..91c3ab6 100644
 +$(SHARED_LIB_O): $(OBJECTS)
 +	#$(CC) -fPIC -O3 -s SIDE_MODULE=1 -o $(SHARED_LIB_O) $(OBJECTS)
 +	#$(CC) -o $@ --no-entry -fPIC -O3 $(OBJECTS)
-+	$(CC) -fPIC -O3 $(OBJECTS) -sMODULARIZE -s EXPORTED_FUNCTIONS='["_generatePublicKey", "_sign", "_verify", "_generateCompressedPublicKey", "_compressedSecretAgreement", "_K12", "_merkleRoot", "_malloc", "_free"]' -o ./crypto.cjs
++	$(CC) -fPIC -O3 $(OBJECTS) -sMODULARIZE -s EXPORTED_FUNCTIONS='["_generatePublicKey", "_sign", "_verify", "_generateCompressedPublicKey", "_compressedSecretAgreement", "_K12", "_merkleRoot", "_verifySolution", "_malloc", "_free"]' -o ./crypto.cjs
  
  crypto_test: $(OBJECTS_CRYPTO_TEST)
  	$(CC) -o crypto_test $(OBJECTS_CRYPTO_TEST) $(ARM_SETTING)
