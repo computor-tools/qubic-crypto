@@ -13,6 +13,12 @@ const equal = function (a, b) {
 }
 
 const exp = {
+    sk: Uint8Array.from([
+        68,   83,  81,  47,  30, 245, 151, 179,
+        101, 204,  56,  79,  10,  43,  16, 206,
+        181, 201,  79,  81, 107, 145,  26, 204,
+        142, 139, 193, 181,  94, 100, 108, 116
+    ]),
     pk: Uint8Array.from([
         250,  81,  48,  79, 222,  52,  19, 148,
          73,   89, 140, 90,   7, 247, 102,   1,
@@ -42,6 +48,10 @@ const exp = {
 };
 
 const test = async function () {
+    const seed = 'a'.repeat(crypto.SEED_LENGTH);
+    const testSk = equal(await crypto.createPrivateKey(seed, 0), exp.sk);
+    console.log('Secret key:', testSk ? 'OK' : 'NOT OK');
+
     const sk = new Uint8Array(crypto.PRIVATE_KEY_LENGTH).fill(1);
     const pk = await crypto.generatePublicKey(sk);
     const testPk = equal(pk, exp.pk) && pk.byteLength === crypto.PUBLIC_KEY_LENGTH
@@ -83,7 +93,7 @@ const test = async function () {
     const testRoot = equal(root, exp.r) && root.byteLength === crypto.DIGEST_LENGTH;
     console.log('Merkle root', testRoot ? 'OK' : 'NOT OK');
 
-    if (!(testPk && testSig && testVer && testKex && testK12 && testRoot)) {
+    if (!(testSk && testPk && testSig && testVer && testKex && testK12 && testRoot)) {
         console.log('Test failed!');
         process.exit(1);
     }

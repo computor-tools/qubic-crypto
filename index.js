@@ -98,6 +98,9 @@
 
 import factory from './crypto.cjs';
 
+const ALPHABET = 'abcdefghijklmnopqrstuvwxyz';
+
+const SEED_LENGTH = 55;
 const PRIVATE_KEY_LENGTH = 32;
 const PUBLIC_KEY_LENGTH = 32;
 const SIGNATURE_LENGTH = 64;
@@ -150,12 +153,63 @@ const methods = factory().then((instance) => ({
 }));
 
 const crypto = {
+    SEED_LENGTH,
     PRIVATE_KEY_LENGTH,
     PUBLIC_KEY_LENGTH,
     SIGNATURE_LENGTH,
     SHARED_SECRET_LENGTH,
     DIGEST_LENGTH,
     NONCE_LENGTH,
+
+    async createPrivateKey(seed, index = 0) {
+        if (Object.prototype.toString.call(seed) === '[object Uint8Array]' && seed.length !== SEED_LENGTH) {
+            for (let i = 0; i < SEED_LENGTH; i++) {
+                if (seed[i] > ALPHABET.indexOf('z')) {
+                    throw new TypeError('Invalid seed.');
+                }
+            }
+        } else {
+            if (new RegExp(`^[a-z]{${SEED_LENGTH}}$`).test(seed) === false) {
+                throw new TypeError('Invalid seed.');
+            }
+
+            const bytes = new Uint8Array(SEED_LENGTH);
+            for (let i = 0; i < SEED_LENGTH; i++) {
+              bytes[i] = ALPHABET.indexOf(seed[i]);
+            }
+            seed = bytes;
+        }
+        if (!Number.isInteger(index)) {
+            throw new TypeError('Invalid index');
+        }
+    
+        const privateKey = new Uint8Array(PRIVATE_KEY_LENGTH);
+        const preimage = seed.slice();
+        while (index-- > 0) {
+            for (let i = 0; i < preimage.length; i++) {
+                if (++preimage[i] > ALPHABET.length) {
+                    preimage[i] = 1;
+                } else {
+                    break;
+                }
+            }
+        }
+
+        const { K12, allocU8, free } = await methods;
+        const inp = allocU8(SEED_LENGTH, preimage);
+        const out = allocU8(PRIVATE_KEY_LENGTH);
+        if (K12(inp, SEED_LENGTH, out, PRIVATE_KEY_LENGTH)) {
+            privateKey.set(out.slice());
+            free(inp);
+            free(out);
+        } else {
+            free(inp);
+            free(out);
+            throw new Error('K12 failed!');
+        }
+    
+        return privateKey;
+    },
 
     async generatePublicKey(secretKey) {
         if (secretKey.byteLength !== PRIVATE_KEY_LENGTH) {
