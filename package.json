@@ -6,7 +6,8 @@
     "build":
       "git submodule update --init --recursive && cd FourQlib && git stash && git checkout 1031567f23278e1135b35cc04e5d74c2ac88c029 && git apply --whitespace=warn --ignore-whitespace ../k12-wasm.diff && cd FourQ_64bit_and_portable && make clean && git -C emsdk pull || git clone https://github.com/emscripten-core/emsdk.git && cd emsdk && ./emsdk install latest && ./emsdk activate latest && source ./emsdk_env.sh && cd .. && make ARCH=x64 CC=emcc ASM=FALSE AVX=FALSE AVX2=FALSE EXTENDED_SET=FALSE USE_ENDO=TRUE GENERIC=FALSE SERIAL_PUSH=FALSE SHARED_LIB=TRUE PLAINK12=TRUE && cp crypto.wasm ../../crypto.wasm && cp crypto.cjs ../../crypto.cjs",
     "test": "bun run test.js",
-    "postinstall": "bun run build && bun run test"
+    "postinstall":
+      "rm -rf K12 && rm -rf FourQlib && git submodule add -f https://github.com/XKCP/K12.git && git submodule add -f https://github.com/microsoft/FourQlib.git && git submodule update --init --recursive && cd FourQlib && git checkout 1031567f23278e1135b35cc04e5d74c2ac88c029 && git apply --whitespace=warn --ignore-whitespace ../k12-wasm.diff && cd FourQ_64bit_and_portable && make clean && git -C emsdk pull || git clone https://github.com/emscripten-core/emsdk.git && cd emsdk && ./emsdk install latest && ./emsdk activate latest && source ./emsdk_env.sh && cd .. && make ARCH=x64 CC=emcc ASM=FALSE AVX=FALSE AVX2=FALSE EXTENDED_SET=FALSE USE_ENDO=TRUE GENERIC=FALSE SERIAL_PUSH=FALSE SHARED_LIB=TRUE PLAINK12=TRUE && cp crypto.wasm ../../crypto.wasm && cp crypto.cjs ../../crypto.cjs && cd ../../ && bun run test"
   },
   "devDependencies": {
     "@types/bun": "latest"
