@@ -21,3 +21,5 @@ jobs:
       - run: sudo apt-get install -y xsltproc
       - run: bun run build
       - run: bun run test
+      - run: shasum -a 512 crypto.cjs
+      - run: shasum -a 512 crypto.wasm
